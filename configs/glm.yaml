@@ -1,0 +1,24 @@
+model_name: THUDM/glm-4-9b-chat
+exp_name: llm_surround
+
+lr: 1.0e-4
+epochs: 1
+weight_decay: 0.01
+
+lora_r: 64
+lora_alpha: 16
+target_modules:
+  - query_key_value
+  - dense
+  - dense_h_to_4h
+  - dense_4h_to_h
+
+training:
+  batch_size: 4
+  accum: 2
+  max_length: 1800
+
+validation:
+  batch_size: 4
+  accum: 1
+  max_length: 8192

@@ -1,0 +1,27 @@
+model_name: RLHFlow/ArmoRM-Llama3-8B-v0.1
+exp_name: llm_surround
+
+lr: 1.0e-4
+epochs: 1
+weight_decay: 0.01
+
+lora_r: 64
+lora_alpha: 16
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+training:
+  batch_size: 4
+  accum: 2
+  max_length: 1800
+
+validation:
+  batch_size: 4
+  accum: 1
+  max_length: 8192

@@ -1,9 +1,11 @@
 from datasets import Dataset, DatasetDict
 from transformers import (
-    AutoModel, AutoTokenizer, AutoConfig, AutoModelForSequenceClassification,
+    AutoModel, AutoTokenizer, AutoConfig, PreTrainedModel, AutoModelForSequenceClassification,
     TrainingArguments, Trainer, DataCollatorWithPadding
 )
 from transformers.modeling_outputs import SequenceClassifierOutput
+
+from focal_loss import FocalLoss
 
 import torch
 import torch.nn as nn
@@ -17,46 +19,76 @@ import warnings, logging
 warnings.simplefilter('ignore')
 logging.disable(logging.WARNING)
 
-exp_name = 'siamese_1_epoch_len_1024'
-bs = 16
-lr = 1e-5
+exp_name = 'cross_encoder_pseudo_single_fold'
+bs = 8
+lr = 5e-6
 epochs = 1
 wd = 0.01
 resize = False
 
-max_length = 1024
+max_length = 1800
 
 ckpt_base_dir = '/mnt/one/kaggle/lmsys-chatbot-arena'
-model_name = 'OpenAssistant/reward-model-deberta-v3-large'
+model_name = 'OpenAssistant/reward-model-deberta-v3-large-v2'
 
-df = pl.read_parquet('data/train.parquet')
+# df = pl.read_parquet('data/train.parquet')
+df = pl.concat([
+    pl.read_parquet('data/train.parquet').select([
+        pl.col('id').cast(pl.Int64), 'prompt', 'response_a', 'response_b', 
+        pl.col('winner_model_a').cast(pl.Float32), 
+        pl.col('winner_model_b').cast(pl.Float32), 
+        pl.col('winner_tie').cast(pl.Float32),
+        'fold'
+    ]),
+    pl.read_parquet('data/lmsys-33k-deduplicated.parquet').select([
+        pl.col('id').cast(pl.Int64), 'prompt', 'response_a', 'response_b', 
+        pl.col('winner_model_a').cast(pl.Float32), 
+        pl.col('winner_model_b').cast(pl.Float32), 
+        pl.col('winner_tie').cast(pl.Float32),
+        'fold'
+    ]),
+    pl.read_parquet('data/pseudo/OpenAssistant_reward-model-deberta-v3-large-v2-cross_encoder_add_lmsys_len_1800.parquet').select([
+        pl.lit(-1).alias('id').cast(pl.Int64), 'prompt', 'response_a', 'response_b', 
+        pl.col('winner_model_a_pred').alias('winner_model_a').cast(pl.Float32), 
+        pl.col('winner_model_b_pred').alias('winner_model_b').cast(pl.Float32), 
+        pl.col('winner_tie_pred').alias('winner_tie').cast(pl.Float32), 
+        'fold'
+    ]),
+])
 ds = Dataset.from_pandas(df.to_pandas())
 
 def format_prompt(row):
-    a_chat = zip(row['prompt'], row['response_a'])
-    b_chat = zip(row['prompt'], row['response_b'])
-
-    a_responses = [f"{r[0]}{sep_token}{r[1]}{sep_token}" for r in a_chat]
-    b_responses = [f"{r[0]}{sep_token}{r[1]}{sep_token}" for r in b_chat]
+    chat_list = zip(row['prompt'], row['response_a'], row['response_b'])
+    responses = [f"{r[0]}{sep_token}{r[1]}{sep_token}{r[2]}{sep_token}" for r in chat_list]
 
     return {
-        'prompt_a': ''.join(a_responses),
-        'prompt_b': ''.join(b_responses),
+        'prompt': ''.join(responses)
     }
 
 def tokenize(batch):
-    tok_a = tokenizer(batch['prompt_a'], max_length=max_length, truncation=True)
-    tok_a = {k: v for k, v in tok_a.items()}
+    return tokenizer(batch['prompt'], max_length=max_length, truncation=True, padding=False)
 
-    tok_b = tokenizer(batch['prompt_b'], max_length=max_length, truncation=True)
-    tok_b = {f'{k}_b': v for k, v in tok_b.items()}
+def calc_length(example):
+    return {'prompt_length': len(example['input_ids'])}
 
-    return {**tok_a, **tok_b}
+def format_target(example):
+    return {'labels': [example['winner_model_a'], example['winner_model_b'], example['winner_tie']]}
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 sep_token = tokenizer.sep_token
 
-ds = ds.map(format_prompt, num_proc=8, batched=False)
+ds = ds.map(
+    format_prompt, 
+    num_proc=8, 
+    batched=False,
+    remove_columns=['prompt', 'response_a', 'response_b']
+)
+ds = ds.map(
+    format_target, 
+    num_proc=8, 
+    batched=False, 
+    remove_columns=['winner_model_a', 'winner_model_b', 'winner_tie']
+)
 tok_ds = ds.map(
     tokenize, 
     batched=True,
@@ -67,48 +99,14 @@ tok_ds = ds.map(
 def get_fold(fold_num):
     return DatasetDict({
         "train": tok_ds.filter(lambda x: x['fold'] != fold_num), 
-        "test": tok_ds.filter(lambda x: x['fold'] == fold_num)
+        "test": (
+            tok_ds
+            .filter(lambda x: x['fold'] == fold_num)
+            .map(calc_length, num_proc=8)
+            .sort('prompt_length', reverse=True)
+            .remove_columns('prompt_length')
+        )
     })
-
-class DataCollatorWithPadding:
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-
-    def __call__(self, batch):
-        batch_a = [{
-            'input_ids': e['input_ids'], 
-            'attention_mask': e['attention_mask'], 
-            'token_type_ids': e['token_type_ids']
-        } for e in batch]
-        batch_b = [{
-            'input_ids': e['input_ids_b'], 
-            'attention_mask': e['attention_mask_b'], 
-            'token_type_ids': e['token_type_ids_b']
-        } for e in batch]
-        
-        batch_a_padded = self.tokenizer.pad(
-            batch_a,
-            padding=True,
-            return_tensors="pt"
-        )
-        batch_b_padded = self.tokenizer.pad(
-            batch_b,
-            padding=True,
-            return_tensors="pt"
-        )
-        
-        labels = torch.tensor([example['labels'] for example in batch])
-        
-        return {
-            'input_ids': batch_a_padded['input_ids'],
-            'attention_mask': batch_a_padded['attention_mask'],
-            'token_type_ids': batch_a_padded['token_type_ids'],
-            'input_ids_b': batch_b_padded['input_ids'],
-            'attention_mask_b': batch_b_padded['attention_mask'],
-            'token_type_ids_b': batch_b_padded['token_type_ids'],
-            'labels': labels
-        }
-
 
 class MeanPooling(nn.Module):
     def __init__(self):
@@ -129,32 +127,21 @@ class Transformer(nn.Module):
         self.transformer = AutoModel.from_pretrained(model_name)
         self.transformer.config.update({
             'hidden_dropout_prob': 0.,
-            'attention_probs_dropout_prob': 0.
+            'attention_probs_dropout_prob': 0.,
+            'max_position_embeddings': 1024
         })
         self.pooling = MeanPooling()
-        self.head = nn.Linear(self.transformer.config.hidden_size * 2, 3)
-    
-    def forward(
-            self, 
-            input_ids, attention_mask, token_type_ids, 
-            input_ids_b, attention_mask_b, token_type_ids_b, 
-            labels=None
-        ):
-        out_a = self.transformer(
+        self.head = nn.Linear(self.transformer.config.hidden_size, 3)
+        
+    def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
+        out = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids
         ).last_hidden_state
-        out_a = self.pooling(out_a, attention_mask)
+        out = self.pooling(out, attention_mask)
 
-        out_b = self.transformer(
-            input_ids=input_ids_b,
-            attention_mask=attention_mask_b,
-            token_type_ids=token_type_ids_b
-        ).last_hidden_state
-        out_b = self.pooling(out_b, attention_mask_b)
-
-        logits = self.head(torch.cat([out_a, out_b], dim=1))
+        logits = self.head(out)
         loss = None
         if labels is not None:
             loss = F.cross_entropy(logits, labels)
@@ -173,6 +160,7 @@ def get_trainer(dds):
         lr_scheduler_type='cosine', 
         bf16=True,
         bf16_full_eval=True,
+        tf32=True,
         optim='adamw_bnb_8bit',
         evaluation_strategy="epoch", 
         logging_steps=1,
@@ -183,20 +171,19 @@ def get_trainer(dds):
         num_train_epochs=epochs, 
         weight_decay=wd, 
         report_to='wandb', 
-        run_name=f'{model_name}/{exp_name}/fold-{i}', 
+        run_name=f'{model_name}/{exp_name}/fold-{i}'.replace('/', '_').replace('/mnt/one/kaggle/lmsys-chatbot-arena/', ''), 
         save_strategy='epoch',
         save_total_limit=1,
         dataloader_num_workers=4,
         dataloader_pin_memory=True,
         ddp_find_unused_parameters=False,
         # gradient_checkpointing=True,
+        # label_smoothing_factor=0.1
         # max_grad_norm=1000,
     )
     
     model = Transformer(model_name)
-    model.transformer.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False}
-    )
+    model.transformer.gradient_checkpointing_enable()
 
     return Trainer(model, args, train_dataset=dds['train'], eval_dataset=dds['test'],
                    tokenizer=tokenizer, data_collator=collator)

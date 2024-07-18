@@ -56,8 +56,8 @@ ext_df = pl.concat([
     #     'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
     # pl.read_parquet('data/distilabel-intel-orca-dpo-pairs.parquet').select([
     #     'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
-    # pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
-    #     'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
+    pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
+        'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
     pl.read_parquet('data/generated.parquet').select([
         'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.lit(-1).alias('fold')]),
 ]).with_row_index(name='id').with_columns(id=(pl.col('id') + 1) * -1)

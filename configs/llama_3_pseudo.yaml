@@ -1,5 +1,5 @@
 model_name: meta-llama/Meta-Llama-3-8B-Instruct
-exp_name: llm_surround_pseudo_ultrafeedback
+exp_name: llm_pseudo_64k
 
 lr: 1.0e-4
 epochs: 1

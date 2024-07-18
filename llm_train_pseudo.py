@@ -76,10 +76,10 @@ ext_df = pl.concat([
     #     'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
     # pl.read_parquet('data/Capybara-Preferences.parquet').select([
     #     'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
+    pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
+        'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
     pl.read_parquet('data/generated.parquet').select([
         'prompt', 'response_a', 'response_b', pl.lit(-1).alias('fold')]),
-    # pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
-    #     'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
 ]).with_row_index(name='id').with_columns(id=(pl.col('id') + 1) * -1)
 # ext_df = ext_df.filter(pl.col('source') == 'preferences')
 ext_df = ext_df.drop('source')

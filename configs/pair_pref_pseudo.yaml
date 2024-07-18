@@ -1,5 +1,5 @@
 model_name: RLHFlow/pair-preference-model-LLaMA3-8B
-exp_name: llm_pseudo_random_generated_8k
+exp_name: llm_pseudo_orpo_64k
 
 lr: 1.0e-4
 epochs: 1

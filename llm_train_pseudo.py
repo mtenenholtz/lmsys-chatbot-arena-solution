@@ -78,11 +78,11 @@ ext_df = pl.concat([
     #     'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
     pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
         'prompt', 'response_a', 'response_b', pl.col('fold').cast(pl.Int32)]),
-    pl.read_parquet('data/generated.parquet').select([
+    pl.read_parquet('data/generated_500k.parquet').select([
         'prompt', 'response_a', 'response_b', pl.lit(-1).alias('fold')]),
 ]).with_row_index(name='id').with_columns(id=(pl.col('id') + 1) * -1)
 # ext_df = ext_df.filter(pl.col('source') == 'preferences')
-ext_df = ext_df.drop('source')
+# ext_df = ext_df.drop('source')
 pseudo_labels = pl.read_parquet('data/pseudo/opt_pseudos_fold_0_sampled.parquet')
 ext_df = (
     ext_df
@@ -94,7 +94,7 @@ ext_df = (
         winner_tie=pl.col('winner_tie_pred').cast(pl.Float32),
     )
     .select(df.columns)
-    .drop(['winner_model_a_pred', 'winner_model_b_pred', 'winner_tie_pred'])
+    # .drop(['winner_model_a_pred', 'winner_model_b_pred', 'winner_tie_pred'])
 )
 df = (
     df
@@ -329,6 +329,7 @@ def get_trainer(dds):
     config = AutoConfig.from_pretrained(model_name)
     model = Model(config, model_name, quant_config=quant_config, pad_token_id=tokenizer.pad_token_id)
     model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.attn_logit_softcapping = None
     # model = prepare_model_for_kbit_training(model)
 
     lora_config = LoraConfig(

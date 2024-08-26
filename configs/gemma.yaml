@@ -1,13 +1,12 @@
 model_name: google/gemma-2-9b-it
-exp_name: llm_surround_rb
+exp_name: llm_surround_no_lstm
 
-lr: 1.0e-5
-head_lr: 1.0e-6
+lr: 1.0e-4
 epochs: 1
 weight_decay: 0.01
 
-lora_r: 16
-lora_alpha: 32
+lora_r: 64
+lora_alpha: 16
 lora_dropout: 0.05
 target_modules:
   - q_proj
@@ -20,7 +19,7 @@ target_modules:
 
 training:
   batch_size: 4
-  accum: 4
+  accum: 2
   max_length: 1800
 
 validation:

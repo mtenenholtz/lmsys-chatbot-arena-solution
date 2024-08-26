@@ -1,8 +1,8 @@
 import os
 from transformers import AutoConfig, AutoModel
 
-model = 'RLHFlow/pair-preference-model-LLaMA3-8B'
-exp_name = 'llm_pseudo_orpo'
+model = 'sfairXC/FsfairX-Gemma2-RM-v0.1'
+exp_name = 'llm_pseudo_rm_orpo_500k_no_lstm_no_cap_rd_2'
 path = f'/mnt/one/kaggle/lmsys-chatbot-arena/{model}-{exp_name}'
 
 for fold in range(1):

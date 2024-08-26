@@ -1,4 +1,4 @@
-model_name: RLHFlow/pair-preference-model-LLaMA3-8B
+model_name: Nexusflow/Starling-LM-7B-beta
 exp_name: llm_surround_no_lstm
 
 lr: 1.0e-4

@@ -58,7 +58,7 @@ ext_df = pl.concat([
     #     'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
     pl.read_parquet('data/orpo-dpo-mix-40k.parquet').select([
         'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.col('fold').cast(pl.Int32)]),
-    pl.read_parquet('data/generated.parquet').select([
+    pl.read_parquet('data/generated_500k.parquet').select([
         'prompt', 'response_a', 'response_b', pl.lit(0).cast(pl.Int32).alias('labels'), pl.lit(-1).alias('fold')]),
 ]).with_row_index(name='id').with_columns(id=(pl.col('id') + 1) * -1)
 # df = pl.concat([df, ext_df])
@@ -132,6 +132,7 @@ def get_trainer(checkpoint_path):
     config = AutoConfig.from_pretrained(model_name)
     model = Model(config, model_name, quant_config=quant_config, pad_token_id=tokenizer.pad_token_id, training=False)
     model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.attn_logit_softcapping = None
     model = PeftModel.from_pretrained(
         model, 
         f'{ckpt_base_dir}/{model_name}-{exp_name}-fold-{i}/{ckpt_dir}'

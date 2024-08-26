@@ -1,5 +1,5 @@
-model_name: RLHFlow/pair-preference-model-LLaMA3-8B
-exp_name: llm_surround_no_lstm
+model_name: mistralai/Mistral-Nemo-Instruct-2407
+exp_name: llm_surround_no_lstm_no_drop
 
 lr: 1.0e-4
 epochs: 1
@@ -17,8 +17,8 @@ target_modules:
   - down_proj
 
 training:
-  batch_size: 4
-  accum: 2
+  batch_size: 2
+  accum: 4
   max_length: 1800
 
 validation:

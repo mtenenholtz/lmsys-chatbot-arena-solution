@@ -1,4 +1,4 @@
-model_name: RLHFlow/pair-preference-model-LLaMA3-8B
+model_name: meta-llama/Meta-Llama-3.1-8B-Instruct
 exp_name: llm_surround_no_lstm
 
 lr: 1.0e-4

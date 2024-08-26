@@ -171,6 +171,9 @@ tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 sep_token = tokenizer.sep_token
 if 'qwen' in model_name.lower():
     tokenizer.padding_side = 'left'
+elif 'mistral-nemo' in model_name.lower():
+    tokenizer.padding_side = 'left'
+    tokenizer.pad_token = tokenizer.eos_token
 else:
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -311,6 +314,7 @@ def get_trainer(dds):
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     model = Model(config, model_name, quant_config=quant_config, pad_token_id=tokenizer.pad_token_id)
     model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.attn_logit_softcapping = None
     # model = prepare_model_for_kbit_training(model)
 
     lora_config = LoraConfig(

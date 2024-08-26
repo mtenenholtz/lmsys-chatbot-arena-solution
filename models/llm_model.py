@@ -71,7 +71,7 @@ class Model(LlamaPreTrainedModel):
 
         if training:
             self.model = prepare_model_for_kbit_training(self.model)
-        self.lstm = ResidualLSTM(config.hidden_size)
+        # self.lstm = ResidualLSTM(config.hidden_size)
         self.score = nn.Linear(config.hidden_size, 3, bias=False)
 
     def forward(
@@ -99,7 +99,7 @@ class Model(LlamaPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-        hidden_states = self.lstm(hidden_states)
+        # hidden_states = self.lstm(hidden_states)
         logits = self.score(hidden_states)
 
         sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1

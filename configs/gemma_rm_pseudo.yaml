@@ -1,5 +1,5 @@
-model_name: RLHFlow/pair-preference-model-LLaMA3-8B
-exp_name: llm_surround_no_lstm
+model_name: sfairXC/FsfairX-Gemma2-RM-v0.1
+exp_name: llm_pseudo_rm_orpo_500k_no_lstm_no_cap
 
 lr: 1.0e-4
 epochs: 1
@@ -7,6 +7,7 @@ weight_decay: 0.01
 
 lora_r: 64
 lora_alpha: 16
+lora_dropout: 0.05
 target_modules:
   - q_proj
   - k_proj
@@ -17,8 +18,8 @@ target_modules:
   - down_proj
 
 training:
-  batch_size: 4
-  accum: 2
+  batch_size: 2
+  accum: 1
   max_length: 1800
 
 validation:

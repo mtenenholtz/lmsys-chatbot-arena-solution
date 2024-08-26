@@ -1,5 +1,5 @@
 model_name: Qwen/Qwen2-7B-Instruct
-exp_name: llm_surround
+exp_name: llm_surround_no_lstm
 
 lr: 1.0e-4
 epochs: 1

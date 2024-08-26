@@ -120,6 +120,9 @@ tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 sep_token = tokenizer.sep_token
 if 'qwen' in model_name.lower():
     tokenizer.padding_side = 'left'
+elif 'mistral-nemo' in model_name.lower():
+    tokenizer.padding_side = 'left'
+    tokenizer.pad_token = tokenizer.eos_token
 else:
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -177,6 +180,7 @@ def get_trainer(dds):
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     model = Model(config, model_name, quant_config=quant_config, pad_token_id=tokenizer.pad_token_id, training=False)
     model.config.pad_token_id = tokenizer.pad_token_id
+    model.config.attn_logit_softcapping = None
     model = PeftModel.from_pretrained(
         model, 
         f'{ckpt_base_dir}/{model_name}-{exp_name}-fold-{i}/{ckpt_dir}'

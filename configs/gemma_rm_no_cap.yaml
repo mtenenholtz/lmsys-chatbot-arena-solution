@@ -1,5 +1,5 @@
 model_name: sfairXC/FsfairX-Gemma2-RM-v0.1
-exp_name: llm_surround_no_lstm
+exp_name: llm_surround_no_lstm_no_cap
 
 lr: 1.0e-4
 epochs: 1

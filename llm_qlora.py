@@ -25,6 +25,7 @@ logging.disable(logging.WARNING)
 from types import SimpleNamespace
 import argparse
 
+# load and parse cli args
 parser = argparse.ArgumentParser()
 
 parser.add_argument("-C", "--config", help="config filename")
@@ -52,13 +53,12 @@ max_length = arguments.training.max_length
 ckpt_base_dir = '/mnt/one/kaggle/lmsys-chatbot-arena'
 model_name = arguments.model_name
 
+# load data
 df = pl.concat([
     pl.read_parquet('data/train.parquet')
         .select([pl.col('id'), 'model_a', 'model_b', 'prompt', 'response_a', 'response_b', 'labels', 'fold']),
     pl.read_parquet('data/lmsys-33k-deduplicated.parquet')
         .select([pl.col('id').cast(pl.Int64), 'model_a', 'model_b', 'prompt', 'response_a', 'response_b', 'labels', 'fold'])
-    # pl.read_parquet('data/mt_bench_human_judgments.parquet')
-    #     .select([pl.col('id').cast(pl.Int64), 'model_a', 'model_b', 'prompt', 'response_a', 'response_b', 'labels', 'fold'])
 ])
 if do_tta:
     df = df.with_columns(
@@ -79,33 +79,7 @@ def format_prompt(row):
         'prompt': ''.join(responses)
     }
 
-# def format_prompt(row):
-#     chat_list = zip(row['prompt'], row['response_a'], row['response_b'])
-#     responses = [f"{prompt_start_tok}{r[0]}{prompt_end_tok}{response_a_start_tok}{r[1]}{response_a_end_tok}{response_b_start_tok}{r[2]}{response_b_end_tok}" for r in chat_list]
-
-#     return {
-#         'prompt': ''.join(responses)
-#     }
-
 def tokenize(batch):
-    # output = tokenizer(
-    #     batch['prompt'], 
-    #     max_length=max_length, 
-    #     truncation=False, 
-    #     padding=False
-    # )
-
-    # if len(output['input_ids']) > max_length:
-    #     input_ids = [tokenizer.bos_token_id] + output['input_ids'][-(max_length-1):]
-    #     attention_mask = [1] * len(input_ids)
-    # else:
-    #     input_ids = output['input_ids']
-    #     attention_mask = output['attention_mask']
-
-    # return {
-    #     'input_ids': input_ids,
-    #     'attention_mask': attention_mask
-    # }
     return tokenizer(
         batch['prompt'], 
         max_length=max_length, 
@@ -113,60 +87,11 @@ def tokenize(batch):
         padding=False
     )
 
-# def format_and_tokenize(row):
-#     chat_list = zip(row['prompt'], row['response_a'], row['response_b'])
-
-#     indiv_len = int(max_length // 3 // len(row['prompt']))
-#     response_input_ids = []
-#     for r in chat_list:
-#         prompt_tok = tokenizer('Prompt: ' + str(r[0]) + '\n', max_length=indiv_len, truncation=True, padding=False, add_special_tokens=False)
-#         response_a_tok = tokenizer('Response A: ' + str(r[1]) + '\n', max_length=indiv_len, truncation=True, padding=False, add_special_tokens=False)
-#         response_b_tok = tokenizer('Response B: ' + str(r[2]) + '\n', max_length=indiv_len, truncation=True, padding=False, add_special_tokens=False)
-        
-#         turn_input_ids = prompt_tok['input_ids'] + response_a_tok['input_ids'] + response_b_tok['input_ids']
-        
-#         response_input_ids += turn_input_ids
-        
-#     response_input_ids = [128000] + response_input_ids
-
-#     return {
-#         'input_ids': response_input_ids,
-#         'attention_mask': [1] * len(response_input_ids),
-#     }
-
-# def format_and_tokenize(row):
-#     chat_list = zip(row['prompt'], row['response_a'], row['response_b'])
-
-#     response_a_input_ids = []
-#     for r in chat_list:
-#         prompt_tok = tokenizer('Prompt: ' + str(r[0]) + '\n', add_special_tokens=False)
-#         response_a_tok = tokenizer('Response A: ' + str(r[1]) + '\n', add_special_tokens=False)
-        
-#         turn_input_ids = prompt_tok['input_ids'] + response_a_tok['input_ids']
-        
-#         response_a_input_ids += turn_input_ids
-
-#     chat_list = zip(row['prompt'], row['response_b'])
-    
-#     response_b_input_ids = []
-#     for r in chat_list:
-#         prompt_tok = tokenizer('Prompt: ' + str(r[0]) + '\n', add_special_tokens=False)
-#         response_b_tok = tokenizer('Response B: ' + str(r[1]) + '\n', add_special_tokens=False)
-        
-#         turn_input_ids = prompt_tok['input_ids'] + response_b_tok['input_ids']
-        
-#         response_b_input_ids += turn_input_ids
-        
-#     response_input_ids = [tokenizer.bos_token_id] + response_a_input_ids[:(max_length - 1) // 2] + [tokenizer.eos_token_id] + response_b_input_ids[:(max_length - 1) // 2]
-
-#     return {
-#         'input_ids': response_input_ids,
-#         'attention_mask': [1] * len(response_input_ids),
-#     }
 
 def calc_length(example):
     return {'prompt_length': len(example['input_ids'])}
 
+# some tokenizer manipulation specific to different models
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 sep_token = tokenizer.sep_token
 if 'qwen' in model_name.lower():
@@ -177,6 +102,7 @@ elif 'mistral-nemo' in model_name.lower():
 else:
     tokenizer.pad_token = tokenizer.eos_token
 
+# preprocess data
 ds = ds.map(format_prompt, num_proc=8, batched=False)
 tok_ds = ds.map(
     tokenize, 
@@ -203,6 +129,7 @@ def get_fold(fold_num):
         )
     })
 
+# basic modifications to enable a differential learning rate
 class CustomTrainer(Trainer):
     def create_optimizer(self):
         """
@@ -314,7 +241,8 @@ def get_trainer(dds):
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     model = Model(config, model_name, quant_config=quant_config, pad_token_id=tokenizer.pad_token_id)
     model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.attn_logit_softcapping = None
+    if 'no_cap' in exp_name:
+        model.config.attn_logit_softcapping = None
     # model = prepare_model_for_kbit_training(model)
 
     lora_config = LoraConfig(
@@ -336,6 +264,7 @@ def get_trainer(dds):
     return CustomTrainer(model, args, train_dataset=dds['train'], eval_dataset=dds['test'],
                    tokenizer=tokenizer, data_collator=collator)
 
+# train!
 for i in range(1):
     # wandb.init(
     #     project='lmsys-chatbot-arena',
